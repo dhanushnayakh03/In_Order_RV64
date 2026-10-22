@@ -28,8 +28,8 @@ module mem_stage (
 
     wire [2:0] offset = alu_result[2:0];
 
-    // Doubleword-aligned memory address
-    assign dmem_addr = {alu_result[`XLEN-1:3], 3'b000};
+    // Memory address (full address passed to interconnect / MMIO)
+    assign dmem_addr = alu_result;
     assign dmem_en   = mem_read | mem_write;
     assign dmem_wen  = mem_write;
 

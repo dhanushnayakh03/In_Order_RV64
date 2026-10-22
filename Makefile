@@ -80,6 +80,21 @@ program: $(VVP_OUT)
 	@echo "============================================================"
 	vvp $(VVP_OUT) +MEM=program.mem
 
+# Assemble ANY assembly program to program.mem for FPGA deployment (no simulation)
+# Usage: make fpga_mem SOURCE=uart_demo.s
+#    or: make fpga_mem SOURCE=test_assembly/example.s
+fpga_mem:
+	@echo "============================================================"
+	@echo "Building program.mem for FPGA from: $(ASM_FILE)"
+	@echo "============================================================"
+	$(CC) $(CFLAGS) $(ASM_FILE) -o program.elf
+	$(OBJDUMP) -d program.elf > program.dump
+	$(OBJCOPY) -O binary program.elf program.bin
+	$(PYTHON) make_hex.py program.bin program.mem
+	@echo "============================================================"
+	@echo "SUCCESS: program.mem generated! Ready for Vivado / FPGA."
+	@echo "============================================================"
+
 # Compile C program to program.mem
 # Usage: make program_c SOURCE=example.c
 #    or: make program_c SOURCE=omegalul.c

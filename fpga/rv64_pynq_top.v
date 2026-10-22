@@ -115,6 +115,21 @@ module rv64_pynq_top #(
         end
     end
 
+    // ========================================================================
+    // 2. Shared 64 KB Unified RAM (Dual-Port)
+    //    Port A: AXI4-Lite (Python Read/Write, 32-bit words)
+    //    Port B: RV64 Core (Fetch 32-bit inst, Load/Store 64-bit doublewords)
+    // ========================================================================
+    localparam MEM_DEPTH = 8192; // 8192 * 64 bits = 64 KB
+    reg [63:0] ram [0:MEM_DEPTH-1];
+
+    // --- Port A: AXI Bus Access (32-bit) ---
+    wire        axi_mem_we  = axi_write_en && (!axi_awaddr[16]);
+    wire [12:0] axi_mem_idx = axi_awaddr[15:3];
+    wire [12:0] axi_rd_idx  = axi_araddr[15:3];
+    wire [63:0] axi_line    = ram[axi_rd_idx];
+    wire [31:0] axi_mem_rdata_word = axi_araddr[2] ? axi_line[63:32] : axi_line[31:0];
+
     // AXI Read Handling
     always @(posedge s_axi_aclk) begin
         if (!s_axi_aresetn) begin
@@ -156,43 +171,6 @@ module rv64_pynq_top #(
         end
     end
 
-    // ========================================================================
-    // 2. Shared 64 KB Unified RAM (Dual-Port)
-    //    Port A: AXI4-Lite (Python Read/Write, 32-bit words)
-    //    Port B: RV64 Core (Fetch 32-bit inst, Load/Store 64-bit doublewords)
-    // ========================================================================
-    localparam MEM_DEPTH = 8192; // 8192 * 64 bits = 64 KB
-    (* ram_style = "block" *)
-    reg [63:0] ram [0:MEM_DEPTH-1];
-
-    // --- Port A: AXI Bus Access (32-bit) ---
-    wire        axi_mem_we = axi_write_en && (!axi_awaddr[16]);
-    wire [12:0] axi_mem_idx = axi_awaddr[15:3];
-    wire [12:0] axi_rd_idx  = axi_araddr[15:3];
-
-    // Synchronous Write from AXI
-    always @(posedge s_axi_aclk) begin
-        if (axi_mem_we) begin
-            if (axi_awaddr[2]) begin
-                // Upper 32-bit word
-                if (s_axi_wstrb[0]) ram[axi_mem_idx][39:32] <= s_axi_wdata[7:0];
-                if (s_axi_wstrb[1]) ram[axi_mem_idx][47:40] <= s_axi_wdata[15:8];
-                if (s_axi_wstrb[2]) ram[axi_mem_idx][55:48] <= s_axi_wdata[23:16];
-                if (s_axi_wstrb[3]) ram[axi_mem_idx][63:56] <= s_axi_wdata[31:24];
-            end else begin
-                // Lower 32-bit word
-                if (s_axi_wstrb[0]) ram[axi_mem_idx][7:0]   <= s_axi_wdata[7:0];
-                if (s_axi_wstrb[1]) ram[axi_mem_idx][15:8]  <= s_axi_wdata[15:8];
-                if (s_axi_wstrb[2]) ram[axi_mem_idx][23:16] <= s_axi_wdata[23:16];
-                if (s_axi_wstrb[3]) ram[axi_mem_idx][31:24] <= s_axi_wdata[31:24];
-            end
-        end
-    end
-
-    // Combinational Read to AXI
-    wire [63:0] axi_line = ram[axi_rd_idx];
-    wire [31:0] axi_mem_rdata_word = axi_araddr[2] ? axi_line[63:32] : axi_line[31:0];
-
     // --- Port B: RV64 Core Access ---
     wire [`XLEN-1:0] core_imem_addr;
     wire [`ILEN-1:0] core_imem_rdata;
@@ -208,11 +186,26 @@ module rv64_pynq_top #(
     wire [63:0] core_i_line = ram[core_i_idx];
     assign core_imem_rdata  = core_imem_addr[2] ? core_i_line[63:32] : core_i_line[31:0];
 
-    // Core Data Memory (Synchronous byte-masked write, combinational read)
-    wire [12:0] core_d_idx = core_dmem_addr[15:3];
+    // Core Data Memory Index
+    wire [12:0] core_d_idx  = core_dmem_addr[15:3];
 
+    // Unified Synchronous RAM Write Process (Synthesizable across all Xilinx tools)
     always @(posedge s_axi_aclk) begin
-        if (core_dmem_en && core_dmem_wen && !reg_reset_core) begin
+        if (axi_mem_we) begin
+            // AXI write (Python loading program or data)
+            if (axi_awaddr[2]) begin
+                if (s_axi_wstrb[0]) ram[axi_mem_idx][39:32] <= s_axi_wdata[7:0];
+                if (s_axi_wstrb[1]) ram[axi_mem_idx][47:40] <= s_axi_wdata[15:8];
+                if (s_axi_wstrb[2]) ram[axi_mem_idx][55:48] <= s_axi_wdata[23:16];
+                if (s_axi_wstrb[3]) ram[axi_mem_idx][63:56] <= s_axi_wdata[31:24];
+            end else begin
+                if (s_axi_wstrb[0]) ram[axi_mem_idx][7:0]   <= s_axi_wdata[7:0];
+                if (s_axi_wstrb[1]) ram[axi_mem_idx][15:8]  <= s_axi_wdata[15:8];
+                if (s_axi_wstrb[2]) ram[axi_mem_idx][23:16] <= s_axi_wdata[23:16];
+                if (s_axi_wstrb[3]) ram[axi_mem_idx][31:24] <= s_axi_wdata[31:24];
+            end
+        end else if (core_dmem_en && core_dmem_wen && !reg_reset_core) begin
+            // Core store instruction (RV64 write)
             if (core_dmem_byte_en[0]) ram[core_d_idx][7:0]   <= core_dmem_wdata[7:0];
             if (core_dmem_byte_en[1]) ram[core_d_idx][15:8]  <= core_dmem_wdata[15:8];
             if (core_dmem_byte_en[2]) ram[core_d_idx][23:16] <= core_dmem_wdata[23:16];

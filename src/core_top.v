@@ -269,7 +269,6 @@ module core_top (
     // ========================================================================
     ex_stage ex_inst (
         .pc            (id_ex_pc),
-        .pc_plus_4     (id_ex_pc_plus_4),
         .rdata1        (id_ex_rdata1),
         .rdata2        (id_ex_rdata2),
         .imm           (id_ex_imm),

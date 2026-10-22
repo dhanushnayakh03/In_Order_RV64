@@ -9,7 +9,6 @@
 module ex_stage (
     // Inputs from ID/EX pipeline register
     input  wire [`XLEN-1:0]      pc,
-    input  wire [`XLEN-1:0]      pc_plus_4,
     input  wire [`XLEN-1:0]      rdata1,
     input  wire [`XLEN-1:0]      rdata2,
     input  wire [`XLEN-1:0]      imm,

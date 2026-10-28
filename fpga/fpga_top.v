@@ -1,5 +1,5 @@
 // ============================================================================
-// File: fpga_top.v
+// File: fpga_top.v ( unrealated currently !)
 // Description: Top-Level FPGA Wrapper for RV64 Core on PYNQ-Z2 Board
 // Interfaces:
 //   - Clock: 125 MHz Oscillator (H16) -> 50 MHz via Xilinx MMCM/PLL

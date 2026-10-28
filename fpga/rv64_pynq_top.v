@@ -116,17 +116,17 @@ module rv64_pynq_top #(
     end
 
     // ========================================================================
-    // 2. Shared 64 KB Unified RAM (Dual-Port)
+    // 2. Shared 16 KB Unified RAM (Dual-Port)
     //    Port A: AXI4-Lite (Python Read/Write, 32-bit words)
     //    Port B: RV64 Core (Fetch 32-bit inst, Load/Store 64-bit doublewords)
     // ========================================================================
-    localparam MEM_DEPTH = 8192; // 8192 * 64 bits = 64 KB
+    localparam MEM_DEPTH = 2048; // 2048 * 64 bits = 16 KB (Fits easily in FPGA LUTRAM)
     reg [63:0] ram [0:MEM_DEPTH-1];
 
     // --- Port A: AXI Bus Access (32-bit) ---
     wire        axi_mem_we  = axi_write_en && (!axi_awaddr[16]);
-    wire [12:0] axi_mem_idx = axi_awaddr[15:3];
-    wire [12:0] axi_rd_idx  = axi_araddr[15:3];
+    wire [10:0] axi_mem_idx = axi_awaddr[13:3];
+    wire [10:0] axi_rd_idx  = axi_araddr[13:3];
     wire [63:0] axi_line    = ram[axi_rd_idx];
     wire [31:0] axi_mem_rdata_word = axi_araddr[2] ? axi_line[63:32] : axi_line[31:0];
 
@@ -182,12 +182,12 @@ module rv64_pynq_top #(
     reg  [`XLEN-1:0] core_dmem_rdata;
 
     // Core Instruction Fetch (Combinational read)
-    wire [12:0] core_i_idx  = core_imem_addr[15:3];
+    wire [10:0] core_i_idx  = core_imem_addr[13:3];
     wire [63:0] core_i_line = ram[core_i_idx];
     assign core_imem_rdata  = core_imem_addr[2] ? core_i_line[63:32] : core_i_line[31:0];
 
     // Core Data Memory Index
-    wire [12:0] core_d_idx  = core_dmem_addr[15:3];
+    wire [10:0] core_d_idx  = core_dmem_addr[13:3];
 
     // Unified Synchronous RAM Write Process (Synthesizable across all Xilinx tools)
     always @(posedge s_axi_aclk) begin

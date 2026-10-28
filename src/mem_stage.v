@@ -10,9 +10,15 @@ module mem_stage (
     // Inputs from EX/MEM pipeline register
     input  wire [`XLEN-1:0]      alu_result,
     input  wire [`XLEN-1:0]      store_data,
+    input  wire [4:0]            ex_mem_rs2,       // Store data source register (rs2)
     input  wire [2:0]            funct3,
     input  wire                  mem_read,
     input  wire                  mem_write,
+
+    // Inputs from WB stage for MEM-to-MEM forwarding
+    input  wire [4:0]            mem_wb_rd,
+    input  wire                  mem_wb_reg_write,
+    input  wire [`XLEN-1:0]      wb_data,
 
     // Data memory interface
     output wire [`XLEN-1:0]      dmem_addr,
@@ -28,6 +34,14 @@ module mem_stage (
 
     wire [2:0] offset = alu_result[2:0];
 
+    // MEM-to-MEM Forwarding (Load-to-Store forwarding):
+    // If the current instruction in MEM is a STORE, and the instruction in WB writes to
+    // the store's source register rs2 (e.g., LOAD immediately followed by STORE),
+    // forward wb_data directly as the store data with 0 stalls!
+    wire fwd_mem_to_mem = mem_write && mem_wb_reg_write &&
+                          (mem_wb_rd != 5'd0) && (mem_wb_rd == ex_mem_rs2);
+    wire [`XLEN-1:0] effective_store_data = fwd_mem_to_mem ? wb_data : store_data;
+
     // Memory address (full address passed to interconnect / MMIO)
     assign dmem_addr = alu_result;
     assign dmem_en   = mem_read | mem_write;
@@ -42,19 +56,19 @@ module mem_stage (
             case (funct3)
                 `FUNCT3_SB: begin
                     dmem_byte_en = 8'b00000001 << offset;
-                    dmem_wdata   = store_data[7:0] << (offset * 8);
+                    dmem_wdata   = effective_store_data[7:0] << (offset * 8);
                 end
                 `FUNCT3_SH: begin
                     dmem_byte_en = 8'b00000011 << (offset & 3'b110);
-                    dmem_wdata   = store_data[15:0] << ((offset & 3'b110) * 8);
+                    dmem_wdata   = effective_store_data[15:0] << ((offset & 3'b110) * 8);
                 end
                 `FUNCT3_SW: begin
                     dmem_byte_en = offset[2] ? 8'b11110000 : 8'b00001111;
-                    dmem_wdata   = offset[2] ? {store_data[31:0], 32'd0} : {32'd0, store_data[31:0]};
+                    dmem_wdata   = offset[2] ? {effective_store_data[31:0], 32'd0} : {32'd0, effective_store_data[31:0]};
                 end
                 `FUNCT3_SD: begin
                     dmem_byte_en = 8'b11111111;
-                    dmem_wdata   = store_data;
+                    dmem_wdata   = effective_store_data;
                 end
                 default: begin
                     dmem_byte_en = 8'b00000000;

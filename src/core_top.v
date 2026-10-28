@@ -106,6 +106,7 @@ module core_top (
     // EX/MEM Register Outputs
     wire [`XLEN-1:0]      ex_mem_alu_result;
     wire [`XLEN-1:0]      ex_mem_store_data;
+    wire [4:0]            ex_mem_rs2;
     wire [4:0]            ex_mem_rd;
     wire [`XLEN-1:0]      ex_mem_pc_plus_4;
     wire                  ex_mem_mem_read;
@@ -244,6 +245,7 @@ module core_top (
         .if_id_rs2      (id_rs2),
         .if_id_uses_rs1 (id_uses_rs1),
         .if_id_uses_rs2 (id_uses_rs2),
+        .if_id_is_store (id_mem_write),
         .id_ex_rd       (id_ex_rd),
         .id_ex_mem_read (id_ex_mem_read),
         .branch_taken   (branch_taken),
@@ -294,6 +296,7 @@ module core_top (
         .rst            (rst),
         .alu_result_in  (ex_alu_result),
         .store_data_in  (ex_store_data),
+        .rs2_in         (id_ex_rs2),
         .rd_in          (id_ex_rd),
         .pc_plus_4_in   (id_ex_pc_plus_4),
         .mem_read_in    (id_ex_mem_read),
@@ -304,6 +307,7 @@ module core_top (
         .halt_in        (id_ex_halt),
         .alu_result_out (ex_mem_alu_result),
         .store_data_out (ex_mem_store_data),
+        .rs2_out        (ex_mem_rs2),
         .rd_out         (ex_mem_rd),
         .pc_plus_4_out  (ex_mem_pc_plus_4),
         .mem_read_out   (ex_mem_mem_read),
@@ -318,18 +322,22 @@ module core_top (
     // 5. Memory Access (MEM) Stage & Pipeline Register
     // ========================================================================
     mem_stage mem_inst (
-        .alu_result   (ex_mem_alu_result),
-        .store_data   (ex_mem_store_data),
-        .funct3       (ex_mem_funct3),
-        .mem_read     (ex_mem_mem_read),
-        .mem_write    (ex_mem_mem_write),
-        .dmem_addr    (dmem_addr),
-        .dmem_wdata   (dmem_wdata),
-        .dmem_byte_en (dmem_byte_en),
-        .dmem_en      (dmem_en),
-        .dmem_wen     (dmem_wen),
-        .dmem_rdata   (dmem_rdata),
-        .load_data    (mem_load_data)
+        .alu_result       (ex_mem_alu_result),
+        .store_data       (ex_mem_store_data),
+        .ex_mem_rs2       (ex_mem_rs2),
+        .funct3           (ex_mem_funct3),
+        .mem_read         (ex_mem_mem_read),
+        .mem_write        (ex_mem_mem_write),
+        .mem_wb_rd        (mem_wb_rd),
+        .mem_wb_reg_write (mem_wb_reg_write),
+        .wb_data          (wb_data),
+        .dmem_addr        (dmem_addr),
+        .dmem_wdata       (dmem_wdata),
+        .dmem_byte_en     (dmem_byte_en),
+        .dmem_en          (dmem_en),
+        .dmem_wen         (dmem_wen),
+        .dmem_rdata       (dmem_rdata),
+        .load_data        (mem_load_data)
     );
 
     mem_wb_reg mem_wb_reg_inst (

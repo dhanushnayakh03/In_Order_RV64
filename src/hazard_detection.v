@@ -12,6 +12,7 @@ module hazard_detection (
     input  wire [4:0]  if_id_rs2,
     input  wire        if_id_uses_rs1,
     input  wire        if_id_uses_rs2,
+    input  wire        if_id_is_store, // 1 if instruction in ID is a STORE
 
     // Instruction currently in EX stage
     input  wire [4:0]  id_ex_rd,
@@ -27,13 +28,19 @@ module hazard_detection (
     output reg         flush_id_ex
 );
 
+    wire rs1_hazard;
+    wire rs2_hazard;
     wire load_use_hazard;
 
     // Load-use hazard detection:
-    // If instruction in EX is a LOAD, and instruction in ID reads that destination register
-    assign load_use_hazard = id_ex_mem_read && (id_ex_rd != 5'd0) &&
-                            ((if_id_uses_rs1 && (id_ex_rd == if_id_rs1)) ||
-                             (if_id_uses_rs2 && (id_ex_rd == if_id_rs2)));
+    // If instruction in EX is a LOAD:
+    // 1. If ID instruction uses rs1 matching id_ex_rd -> MUST stall (address computation in EX).
+    // 2. If ID instruction uses rs2 matching id_ex_rd:
+    //    - If ID instruction is a STORE -> NO stall (handled via MEM-to-MEM forwarding in MEM stage!).
+    //    - Otherwise -> MUST stall.
+    assign rs1_hazard = if_id_uses_rs1 && (id_ex_rd == if_id_rs1);
+    assign rs2_hazard = if_id_uses_rs2 && (id_ex_rd == if_id_rs2) && (!if_id_is_store);
+    assign load_use_hazard = id_ex_mem_read && (id_ex_rd != 5'd0) && (rs1_hazard || rs2_hazard);
 
     always @(*) begin
         // Default: no stalls, no flushes

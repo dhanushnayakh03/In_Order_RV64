@@ -155,6 +155,7 @@ module ex_mem_reg (
     // Data inputs
     input  wire [`XLEN-1:0]      alu_result_in,
     input  wire [`XLEN-1:0]      store_data_in,
+    input  wire [4:0]            rs2_in,
     input  wire [4:0]            rd_in,
     input  wire [`XLEN-1:0]      pc_plus_4_in,
 
@@ -169,6 +170,7 @@ module ex_mem_reg (
     // Data outputs
     output reg  [`XLEN-1:0]      alu_result_out,
     output reg  [`XLEN-1:0]      store_data_out,
+    output reg  [4:0]            rs2_out,
     output reg  [4:0]            rd_out,
     output reg  [`XLEN-1:0]      pc_plus_4_out,
 
@@ -185,6 +187,7 @@ module ex_mem_reg (
         if (rst) begin
             alu_result_out <= {`XLEN{1'b0}};
             store_data_out <= {`XLEN{1'b0}};
+            rs2_out        <= 5'd0;
             rd_out         <= 5'd0;
             pc_plus_4_out  <= {`XLEN{1'b0}};
 
@@ -197,6 +200,7 @@ module ex_mem_reg (
         end else begin
             alu_result_out <= alu_result_in;
             store_data_out <= store_data_in;
+            rs2_out        <= rs2_in;
             rd_out         <= rd_in;
             pc_plus_4_out  <= pc_plus_4_in;
 

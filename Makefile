@@ -1,5 +1,5 @@
 # ============================================================================
-# Makefile for 5-Stage In-Order RV64 Core
+# Makefile for 7-Stage In-Order RV64 Core (BRAM IMEM / DMEM)
 # Simulator: Icarus Verilog (iverilog / vvp)
 # Toolchain: riscv64-unknown-elf-gcc
 # ============================================================================
@@ -17,8 +17,8 @@ C_DIR    = test_cprog
 PROG_DIR = ../test_progs
 
 # Compilation flags
-CFLAGS   = -march=rv64i -mabi=lp64 -nostdlib -nostartfiles -T linker.ld
-CFLAGS_C = -march=rv64i -mabi=lp64 -nostdlib -nostartfiles -O2 -T linker.ld
+CFLAGS   = -march=rv64im -mabi=lp64 -nostdlib -nostartfiles -T linker.ld
+CFLAGS_C = -march=rv64im -mabi=lp64 -nostdlib -nostartfiles -O2 -T linker.ld
 VFLAGS   = -g2001 -I$(SRC_DIR)
 
 # Verilog source files
@@ -32,10 +32,10 @@ SRCS    = $(SRC_DIR)/rv64_defs.v \
           $(SRC_DIR)/id_stage.v \
           $(SRC_DIR)/ex_stage.v \
           $(SRC_DIR)/mem_stage.v \
-          $(SRC_DIR)/wb_stage.v \
           $(SRC_DIR)/pipeline_registers.v \
           $(SRC_DIR)/core_top.v \
-          $(SRC_DIR)/memory.v \
+          $(SRC_DIR)/imem.v \
+          $(SRC_DIR)/dmem.v \
           tb_core.v
 
 VVP_OUT = tb_core.vvp
@@ -81,7 +81,7 @@ program: $(VVP_OUT)
 	vvp $(VVP_OUT) +MEM=program.mem
 
 # Assemble ANY assembly program to program.mem for FPGA deployment (no simulation)
-# Usage: make fpga_mem SOURCE=uart_demo.s
+# Usage: make fpga_mem SOURCE=test_evens_64.s   (then copy program.bin to the board)
 #    or: make fpga_mem SOURCE=test_assembly/example.s
 fpga_mem:
 	@echo "============================================================"

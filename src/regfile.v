@@ -18,6 +18,10 @@ module regfile (
     input  wire [4:0]            raddr2,
     output wire [`XLEN-1:0]      rdata2,
     
+    // Debug Read Port (host inspection of architectural state, no forwarding)
+    input  wire [4:0]            raddr_dbg,
+    output wire [`XLEN-1:0]      rdata_dbg,
+
     // Write Port
     input  wire                  wen,
     input  wire [4:0]            waddr,
@@ -45,5 +49,8 @@ module regfile (
     // Read Port 2 with internal forwarding (write-before-read)
     assign rdata2 = (raddr2 == 5'd0) ? {`XLEN{1'b0}} :
                     (wen && (waddr == raddr2)) ? wdata : regs[raddr2];
+
+    // Debug Read Port
+    assign rdata_dbg = (raddr_dbg == 5'd0) ? {`XLEN{1'b0}} : regs[raddr_dbg];
 
 endmodule

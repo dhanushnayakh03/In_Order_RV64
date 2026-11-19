@@ -13,10 +13,23 @@ with open(sys.argv[1], "rb") as f:
 while len(data) % 8 != 0:
     data += b'\x00'
 
+MEM_BYTES = 65536            # must match MEM_SIZE_BYTES in src/imem.v / src/dmem.v
+MEM_DEPTH = MEM_BYTES // 8
+
+if len(data) > MEM_BYTES:
+    print(f"Error: program image is {len(data)} bytes, larger than the {MEM_BYTES}-byte memory")
+    sys.exit(1)
+
 with open(sys.argv[2], "w") as f:
+    words = 0
     for i in range(0, len(data), 8):
         chunk = data[i:i+8]
         # In memory.v: line[63:32] is upper, line[31:0] is lower
         # chunk[0..3] is word 0 (lower), chunk[4..7] is word 1 (upper)
         val = int.from_bytes(chunk, byteorder='little')
         f.write(f"{val:016x}\n")
+        words += 1
+    # Pad remaining memory up to MEM_DEPTH words so $readmemh does not trigger a warning
+    while words < MEM_DEPTH:
+        f.write("0000000000000000\n")
+        words += 1

@@ -1,0 +1,36 @@
+[*] layout for tb_forwarding
+[timestart] 0
+@24
+tb_forwarding.case_id[7:0]
+@200
+-inputs
+@24
+tb_forwarding.rs1[4:0]
+tb_forwarding.rs2[4:0]
+tb_forwarding.exmem1_rd[4:0]
+@28
+tb_forwarding.exmem1_we
+@24
+tb_forwarding.mem1mem2_rd[4:0]
+@28
+tb_forwarding.mem1mem2_we
+@24
+tb_forwarding.mem2wb_rd[4:0]
+@28
+tb_forwarding.mem2wb_we
+@200
+-outputs
+@28
+tb_forwarding.forward_a[1:0]
+@820
+tb_forwarding.fwd_a_src[31:0]
+@28
+tb_forwarding.forward_b[1:0]
+@820
+tb_forwarding.fwd_b_src[31:0]
+@200
+-check
+@28
+tb_forwarding.exp_a[1:0]
+tb_forwarding.exp_b[1:0]
+tb_forwarding.ok

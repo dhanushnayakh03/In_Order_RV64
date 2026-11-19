@@ -1,0 +1,38 @@
+[*] layout for tb_multiplier
+[timestart] 0
+@28
+tb_multiplier.clk
+tb_multiplier.rst
+@820
+tb_multiplier.op_name[47:0]
+@24
+tb_multiplier.alu_ctrl[4:0]
+@200
+-operands
+@22
+tb_multiplier.operand_a[63:0]
+tb_multiplier.operand_b[63:0]
+@28
+tb_multiplier.forward_a[1:0]
+@22
+tb_multiplier.fwd_data_mem1[63:0]
+@200
+-multiplier state
+@24
+tb_multiplier.mult_cnt[1:0]
+@28
+tb_multiplier.mult_busy
+@22
+tb_multiplier.hold_opa[63:0]
+tb_multiplier.hold_opb[63:0]
+@200
+-result
+@22
+tb_multiplier.alu_result[63:0]
+@820
+tb_multiplier.exmem1_op[47:0]
+@22
+tb_multiplier.exmem1_result[63:0]
+tb_multiplier.exmem1_exp[63:0]
+@28
+tb_multiplier.ok

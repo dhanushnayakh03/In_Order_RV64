@@ -26,6 +26,7 @@
 `define OPCODE_LUI          7'b0110111 // Load Upper Immediate
 `define OPCODE_AUIPC        7'b0010111 // Add Upper Immediate to PC
 `define OPCODE_SYSTEM       7'b1110011 // System instructions (ECALL, EBREAK, WFI)
+`define OPCODE_MISC_MEM     7'b0001111 // FENCE / FENCE.I (executed as NOP: single core, no caches)
 
 // 3-bit funct3 for BRANCH
 `define FUNCT3_BEQ          3'b000
@@ -69,6 +70,12 @@
 `define ALU_SRAW            5'd14
 // Pass operand B directly (e.g. for LUI)
 `define ALU_PASS_B          5'd15
+// RV64M Multiplication ALU operations
+`define ALU_MUL             5'd16
+`define ALU_MULH            5'd17
+`define ALU_MULHSU          5'd18
+`define ALU_MULHU           5'd19
+`define ALU_MULW            5'd20
 
 // ALU Input Mux Selects
 `define ALUA_SEL_RS1        1'b0
@@ -82,10 +89,11 @@
 `define WB_SEL_MEM          2'b01
 `define WB_SEL_PC4          2'b10
 
-// Forwarding Multiplexer Selects
+// Forwarding Multiplexer Selects (EX operands)
 `define FWD_NONE            2'b00
-`define FWD_FROM_MEM        2'b01 // From MEM/WB register
-`define FWD_FROM_EX         2'b10 // From EX/MEM register
+`define FWD_FROM_WB         2'b01 // From MEM2/WB register
+`define FWD_FROM_MEM1       2'b10 // From EX/MEM1 register
+`define FWD_FROM_MEM2       2'b11 // From MEM1/MEM2 register
 
 // NOP instruction: ADDI x0, x0, 0
 `define NOP_INST            32'h00000013

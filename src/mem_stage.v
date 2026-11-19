@@ -1,90 +1,112 @@
 // ============================================================================
 // File: mem_stage.v
-// Description: Memory (MEM) stage for RV64 load/store alignment & sign-extension
+// Description: Memory stages of the 7-stage pipeline
+//   mem1_stage: drives the DMEM BRAM from the EX/MEM1 register (address,
+//               byte enables, aligned store data). Stores write at the end of
+//               MEM1, loads issue their read here.
+//   mem2_stage: load data returns from the BRAM; extract / sign-extend and
+//               select the final writeback value for the MEM2/WB register.
 // Standard Verilog-2001
 // ============================================================================
 
 `include "rv64_defs.v"
 
-module mem_stage (
-    // Inputs from EX/MEM pipeline register
-    input  wire [`XLEN-1:0]      alu_result,
-    input  wire [`XLEN-1:0]      store_data,
-    input  wire [4:0]            ex_mem_rs2,       // Store data source register (rs2)
+// ----------------------------------------------------------------------------
+// MEM1
+// ----------------------------------------------------------------------------
+module mem1_stage (
+    // From EX/MEM1 register
+    input  wire [`XLEN-1:0]      addr,          // EX/MEM1 result (effective address)
+    input  wire [`XLEN-1:0]      store_data,    // rs2 value forwarded in EX
+    input  wire [4:0]            rs2,
     input  wire [2:0]            funct3,
     input  wire                  mem_read,
     input  wire                  mem_write,
 
-    // Inputs from WB stage for MEM-to-MEM forwarding
-    input  wire [4:0]            mem_wb_rd,
-    input  wire                  mem_wb_reg_write,
+    // Late store-data forwarding (producer now in MEM2 / WB). Needed when the
+    // producer is a load that was not finished when the store was in EX, and
+    // always correct otherwise (MEM2 holds the youngest older instruction).
+    input  wire                  mem2_reg_write,
+    input  wire [4:0]            mem2_rd,
+    input  wire [`XLEN-1:0]      mem2_result,   // MEM2 final value (incl. load data)
+    input  wire                  wb_reg_write,
+    input  wire [4:0]            wb_rd,
     input  wire [`XLEN-1:0]      wb_data,
 
-    // Data memory interface
-    output wire [`XLEN-1:0]      dmem_addr,
-    output reg  [`XLEN-1:0]      dmem_wdata,
-    output reg  [7:0]            dmem_byte_en,
+    // DMEM port A
     output wire                  dmem_en,
-    output wire                  dmem_wen,
-    input  wire [`XLEN-1:0]      dmem_rdata,
-
-    // Formatted load data to MEM/WB register
-    output reg  [`XLEN-1:0]      load_data
+    output reg  [7:0]            dmem_we,
+    output wire [`XLEN-1:0]      dmem_addr,
+    output reg  [`XLEN-1:0]      dmem_wdata
 );
 
-    wire [2:0] offset = alu_result[2:0];
+    wire [2:0] offset = addr[2:0];
 
-    // MEM-to-MEM Forwarding (Load-to-Store forwarding):
-    // If the current instruction in MEM is a STORE, and the instruction in WB writes to
-    // the store's source register rs2 (e.g., LOAD immediately followed by STORE),
-    // forward wb_data directly as the store data with 0 stalls!
-    wire fwd_mem_to_mem = mem_write && mem_wb_reg_write &&
-                          (mem_wb_rd != 5'd0) && (mem_wb_rd == ex_mem_rs2);
-    wire [`XLEN-1:0] effective_store_data = fwd_mem_to_mem ? wb_data : store_data;
+    wire fwd_mem2 = mem2_reg_write && (mem2_rd != 5'd0) && (mem2_rd == rs2);
+    wire fwd_wb   = wb_reg_write   && (wb_rd   != 5'd0) && (wb_rd   == rs2);
 
-    // Memory address (full address passed to interconnect / MMIO)
-    assign dmem_addr = alu_result;
+    wire [`XLEN-1:0] sdata = fwd_mem2 ? mem2_result :
+                             fwd_wb   ? wb_data     : store_data;
+
+    assign dmem_addr = addr;
     assign dmem_en   = mem_read | mem_write;
-    assign dmem_wen  = mem_write;
 
-    // Store formatting: byte enable generation and data alignment
+    // Store formatting: byte enables and data alignment
     always @(*) begin
-        dmem_byte_en = 8'b00000000;
-        dmem_wdata   = {`XLEN{1'b0}};
-
+        dmem_we    = 8'b00000000;
+        dmem_wdata = {`XLEN{1'b0}};
         if (mem_write) begin
             case (funct3)
                 `FUNCT3_SB: begin
-                    dmem_byte_en = 8'b00000001 << offset;
-                    dmem_wdata   = effective_store_data[7:0] << (offset * 8);
+                    dmem_we    = 8'b00000001 << offset;
+                    dmem_wdata = {8{sdata[7:0]}};
                 end
                 `FUNCT3_SH: begin
-                    dmem_byte_en = 8'b00000011 << (offset & 3'b110);
-                    dmem_wdata   = effective_store_data[15:0] << ((offset & 3'b110) * 8);
+                    dmem_we    = 8'b00000011 << {offset[2:1], 1'b0};
+                    dmem_wdata = {4{sdata[15:0]}};
                 end
                 `FUNCT3_SW: begin
-                    dmem_byte_en = offset[2] ? 8'b11110000 : 8'b00001111;
-                    dmem_wdata   = offset[2] ? {effective_store_data[31:0], 32'd0} : {32'd0, effective_store_data[31:0]};
+                    dmem_we    = offset[2] ? 8'b11110000 : 8'b00001111;
+                    dmem_wdata = {2{sdata[31:0]}};
                 end
                 `FUNCT3_SD: begin
-                    dmem_byte_en = 8'b11111111;
-                    dmem_wdata   = effective_store_data;
+                    dmem_we    = 8'b11111111;
+                    dmem_wdata = sdata;
                 end
                 default: begin
-                    dmem_byte_en = 8'b00000000;
-                    dmem_wdata   = {`XLEN{1'b0}};
+                    dmem_we    = 8'b00000000;
+                    dmem_wdata = {`XLEN{1'b0}};
                 end
             endcase
         end
     end
 
-    // Load formatting: extraction and sign/zero extension
-    reg [7:0]  selected_byte;
-    reg [15:0] selected_half;
-    reg [31:0] selected_word;
+endmodule
+
+// ----------------------------------------------------------------------------
+// MEM2
+// ----------------------------------------------------------------------------
+module mem2_stage (
+    // From MEM1/MEM2 register
+    input  wire [`XLEN-1:0]      result,        // ALU result / address / PC+4
+    input  wire [2:0]            funct3,
+    input  wire                  mem_read,
+
+    // From DMEM port A (registered BRAM output)
+    input  wire [`XLEN-1:0]      dmem_rdata,
+
+    // Final writeback value
+    output wire [`XLEN-1:0]      wb_value
+);
+
+    wire [2:0] offset = result[2:0];
+
+    reg [7:0]       selected_byte;
+    reg [15:0]      selected_half;
+    reg [31:0]      selected_word;
+    reg [`XLEN-1:0] load_data;
 
     always @(*) begin
-        // Byte slice
         case (offset)
             3'd0: selected_byte = dmem_rdata[7:0];
             3'd1: selected_byte = dmem_rdata[15:8];
@@ -93,21 +115,18 @@ module mem_stage (
             3'd4: selected_byte = dmem_rdata[39:32];
             3'd5: selected_byte = dmem_rdata[47:40];
             3'd6: selected_byte = dmem_rdata[55:48];
-            3'd7: selected_byte = dmem_rdata[63:56];
+            default: selected_byte = dmem_rdata[63:56];
         endcase
 
-        // Halfword slice (aligned to 2 bytes)
         case (offset[2:1])
             2'd0: selected_half = dmem_rdata[15:0];
             2'd1: selected_half = dmem_rdata[31:16];
             2'd2: selected_half = dmem_rdata[47:32];
-            2'd3: selected_half = dmem_rdata[63:48];
+            default: selected_half = dmem_rdata[63:48];
         endcase
 
-        // Word slice (aligned to 4 bytes)
         selected_word = offset[2] ? dmem_rdata[63:32] : dmem_rdata[31:0];
 
-        // Format final load data based on funct3
         case (funct3)
             `FUNCT3_LB:  load_data = {{56{selected_byte[7]}}, selected_byte};
             `FUNCT3_LBU: load_data = {56'd0, selected_byte};
@@ -115,9 +134,10 @@ module mem_stage (
             `FUNCT3_LHU: load_data = {48'd0, selected_half};
             `FUNCT3_LW:  load_data = {{32{selected_word[31]}}, selected_word};
             `FUNCT3_LWU: load_data = {32'd0, selected_word};
-            `FUNCT3_LD:  load_data = dmem_rdata;
-            default:     load_data = dmem_rdata;
+            default:     load_data = dmem_rdata;          // LD
         endcase
     end
+
+    assign wb_value = mem_read ? load_data : result;
 
 endmodule

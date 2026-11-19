@@ -1,59 +1,48 @@
 // ============================================================================
 // File: forwarding_unit.v
-// Description: Data hazard forwarding unit (EX/MEM and MEM/WB forwarding to EX)
+// Description: EX-stage operand forwarding for the 7-stage pipeline.
+//   Sources, youngest first: EX/MEM1, MEM1/MEM2, MEM2/WB (all registers).
+//   A load still in MEM1/MEM2 only carries its address; a dependent ALU /
+//   branch / address use is stalled by the hazard unit, and a dependent store
+//   data use is re-forwarded in MEM1, so forwarding the address is harmless.
 // Standard Verilog-2001
 // ============================================================================
 
 `include "rv64_defs.v"
 
 module forwarding_unit (
-    // Source registers from ID/EX stage
     input  wire [4:0]  id_ex_rs1,
     input  wire [4:0]  id_ex_rs2,
 
-    // Destination register and write enable from EX/MEM stage
-    input  wire [4:0]  ex_mem_rd,
-    input  wire        ex_mem_reg_write,
-
-    // Destination register and write enable from MEM/WB stage
+    input  wire [4:0]  ex_mem1_rd,
+    input  wire        ex_mem1_reg_write,
+    input  wire [4:0]  mem1_mem2_rd,
+    input  wire        mem1_mem2_reg_write,
     input  wire [4:0]  mem_wb_rd,
     input  wire        mem_wb_reg_write,
 
-    // Forwarding select signals to EX stage
     output reg  [1:0]  forward_a,
     output reg  [1:0]  forward_b
 );
 
-    // Forwarding for Operand A (rs1)
-    always @(*) begin
-        // Priority 1: EX/MEM hazard (most recent instruction)
-        if (ex_mem_reg_write && (ex_mem_rd != 5'd0) && (ex_mem_rd == id_ex_rs1)) begin
-            forward_a = `FWD_FROM_EX; // 2'b10
+    function [1:0] fwd_sel;
+        input [4:0] rs;
+        input [4:0] rd1; input we1;
+        input [4:0] rd2; input we2;
+        input [4:0] rd3; input we3;
+        begin
+            if      (we1 && (rd1 != 5'd0) && (rd1 == rs)) fwd_sel = `FWD_FROM_MEM1;
+            else if (we2 && (rd2 != 5'd0) && (rd2 == rs)) fwd_sel = `FWD_FROM_MEM2;
+            else if (we3 && (rd3 != 5'd0) && (rd3 == rs)) fwd_sel = `FWD_FROM_WB;
+            else                                          fwd_sel = `FWD_NONE;
         end
-        // Priority 2: MEM/WB hazard (older instruction)
-        else if (mem_wb_reg_write && (mem_wb_rd != 5'd0) && (mem_wb_rd == id_ex_rs1)) begin
-            forward_a = `FWD_FROM_MEM; // 2'b01
-        end
-        // No hazard
-        else begin
-            forward_a = `FWD_NONE; // 2'b00
-        end
-    end
+    endfunction
 
-    // Forwarding for Operand B (rs2)
     always @(*) begin
-        // Priority 1: EX/MEM hazard
-        if (ex_mem_reg_write && (ex_mem_rd != 5'd0) && (ex_mem_rd == id_ex_rs2)) begin
-            forward_b = `FWD_FROM_EX; // 2'b10
-        end
-        // Priority 2: MEM/WB hazard
-        else if (mem_wb_reg_write && (mem_wb_rd != 5'd0) && (mem_wb_rd == id_ex_rs2)) begin
-            forward_b = `FWD_FROM_MEM; // 2'b01
-        end
-        // No hazard
-        else begin
-            forward_b = `FWD_NONE; // 2'b00
-        end
+        forward_a = fwd_sel(id_ex_rs1, ex_mem1_rd, ex_mem1_reg_write,
+                            mem1_mem2_rd, mem1_mem2_reg_write, mem_wb_rd, mem_wb_reg_write);
+        forward_b = fwd_sel(id_ex_rs2, ex_mem1_rd, ex_mem1_reg_write,
+                            mem1_mem2_rd, mem1_mem2_reg_write, mem_wb_rd, mem_wb_reg_write);
     end
 
 endmodule

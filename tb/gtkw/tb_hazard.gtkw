@@ -1,0 +1,48 @@
+[*] layout for tb_hazard
+[timestart] 0
+@24
+tb_hazard.case_id[7:0]
+@820
+tb_hazard.scenario[127:0]
+@200
+-ID instruction
+@24
+tb_hazard.id_rs1[4:0]
+tb_hazard.id_rs2[4:0]
+@28
+tb_hazard.id_uses_rs1
+tb_hazard.id_uses_rs2
+tb_hazard.id_is_store
+@200
+-loads in flight
+@28
+tb_hazard.idex_mem_read
+@24
+tb_hazard.idex_rd[4:0]
+@28
+tb_hazard.exmem1_mem_read
+@24
+tb_hazard.exmem1_rd[4:0]
+@200
+-events
+@28
+tb_hazard.branch_taken
+tb_hazard.mult_busy
+tb_hazard.stop_fetch
+@200
+-outputs
+@28
+tb_hazard.stall_pc
+tb_hazard.stall_if2
+tb_hazard.stall_if_id
+tb_hazard.stall_id_ex
+tb_hazard.flush_if2
+tb_hazard.flush_if_id
+tb_hazard.flush_id_ex
+tb_hazard.flush_ex_mem
+@200
+-check
+@28
+tb_hazard.ctrl[7:0]
+tb_hazard.exp_ctrl[7:0]
+tb_hazard.ok

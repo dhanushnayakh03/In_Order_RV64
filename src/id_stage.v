@@ -19,6 +19,10 @@ module id_stage (
     input  wire [4:0]            wb_waddr,
     input  wire [`XLEN-1:0]      wb_wdata,
 
+    // Debug register read port (host access to architectural registers)
+    input  wire [4:0]            dbg_raddr,
+    output wire [`XLEN-1:0]      dbg_rdata,
+
     // Register file outputs
     output wire [4:0]            rs1,
     output wire [4:0]            rs2,
@@ -43,7 +47,11 @@ module id_stage (
     output reg                   reg_write,
     output reg  [1:0]            wb_sel,
     output wire [2:0]            funct3,
-    output reg                   halt
+    output reg                   halt,
+    // Unsupported / illegal encoding (incl. RV64M DIV/REM, which this core
+    // deliberately does not implement). Decoded as a NOP; core halts with an
+    // error once it reaches WB.
+    output reg                   illegal
 );
 
     wire [6:0] opcode = inst[6:0];
@@ -62,6 +70,8 @@ module id_stage (
         .rdata1 (rdata1),
         .raddr2 (rs2),
         .rdata2 (rdata2),
+        .raddr_dbg (dbg_raddr),
+        .rdata_dbg (dbg_rdata),
         .wen    (wb_wen),
         .waddr  (wb_waddr),
         .wdata  (wb_wdata)
@@ -96,6 +106,55 @@ module id_stage (
         endcase
     end
 
+    // Illegal / Unsupported Instruction Detection
+    always @(*) begin
+        illegal = 1'b0;
+        case (opcode)
+            `OPCODE_R_OP: begin
+                case (funct7)
+                    7'b0000000: illegal = 1'b0;                                  // ADD..AND
+                    7'b0100000: illegal = !(funct3 == 3'b000 || funct3 == 3'b101); // SUB, SRA
+                    7'b0000001: illegal = funct3[2];                             // MUL* ok, DIV/DIVU/REM/REMU not supported
+                    default:    illegal = 1'b1;
+                endcase
+            end
+            `OPCODE_R_OP_32: begin
+                case (funct7)
+                    7'b0000000: illegal = !(funct3 == 3'b000 || funct3 == 3'b001 || funct3 == 3'b101); // ADDW, SLLW, SRLW
+                    7'b0100000: illegal = !(funct3 == 3'b000 || funct3 == 3'b101); // SUBW, SRAW
+                    7'b0000001: illegal = (funct3 != 3'b000);                    // MULW ok, DIVW/DIVUW/REMW/REMUW not supported
+                    default:    illegal = 1'b1;
+                endcase
+            end
+            `OPCODE_I_OP: begin
+                case (funct3)
+                    3'b001:  illegal = (inst[31:26] != 6'b000000);                 // SLLI
+                    3'b101:  illegal = !(inst[31:26] == 6'b000000 ||
+                                         inst[31:26] == 6'b010000);                // SRLI / SRAI
+                    default: illegal = 1'b0;
+                endcase
+            end
+            `OPCODE_I_OP_32: begin
+                case (funct3)
+                    3'b000:  illegal = 1'b0;                                       // ADDIW
+                    3'b001:  illegal = (funct7 != 7'b0000000);                     // SLLIW
+                    3'b101:  illegal = !(funct7 == 7'b0000000 || funct7 == 7'b0100000); // SRLIW / SRAIW
+                    default: illegal = 1'b1;
+                endcase
+            end
+            `OPCODE_LOAD:     illegal = (funct3 == 3'b111);
+            `OPCODE_STORE:    illegal = funct3[2];
+            `OPCODE_BRANCH:   illegal = (funct3 == 3'b010 || funct3 == 3'b011);
+            `OPCODE_JALR:     illegal = (funct3 != 3'b000);
+            `OPCODE_JAL,
+            `OPCODE_LUI,
+            `OPCODE_AUIPC:    illegal = 1'b0;
+            `OPCODE_MISC_MEM: illegal = !(funct3 == 3'b000 || funct3 == 3'b001); // FENCE / FENCE.I -> NOP
+            `OPCODE_SYSTEM:   illegal = (inst != `WFI_INST);   // ECALL/EBREAK/CSR* not supported
+            default:          illegal = 1'b1;                  // incl. all-zero word
+        endcase
+    end
+
     // Control Unit Decoder
     always @(*) begin
         // Defaults
@@ -122,17 +181,27 @@ module id_stage (
                 wb_sel     = `WB_SEL_ALU;
                 uses_rs1   = 1'b1;
                 uses_rs2   = 1'b1;
-                case (funct3)
-                    3'b000: alu_ctrl = (funct7[5]) ? `ALU_SUB : `ALU_ADD;
-                    3'b001: alu_ctrl = `ALU_SLL;
-                    3'b010: alu_ctrl = `ALU_SLT;
-                    3'b011: alu_ctrl = `ALU_SLTU;
-                    3'b100: alu_ctrl = `ALU_XOR;
-                    3'b101: alu_ctrl = (funct7[5]) ? `ALU_SRA : `ALU_SRL;
-                    3'b110: alu_ctrl = `ALU_OR;
-                    3'b111: alu_ctrl = `ALU_AND;
-                    default: alu_ctrl = `ALU_ADD;
-                endcase
+                if (funct7 == 7'b0000001) begin
+                    case (funct3)
+                        3'b000: alu_ctrl = `ALU_MUL;    // MUL
+                        3'b001: alu_ctrl = `ALU_MULH;   // MULH
+                        3'b010: alu_ctrl = `ALU_MULHSU; // MULHSU
+                        3'b011: alu_ctrl = `ALU_MULHU;  // MULHU
+                        default: alu_ctrl = `ALU_MUL;
+                    endcase
+                end else begin
+                    case (funct3)
+                        3'b000: alu_ctrl = (funct7[5]) ? `ALU_SUB : `ALU_ADD;
+                        3'b001: alu_ctrl = `ALU_SLL;
+                        3'b010: alu_ctrl = `ALU_SLT;
+                        3'b011: alu_ctrl = `ALU_SLTU;
+                        3'b100: alu_ctrl = `ALU_XOR;
+                        3'b101: alu_ctrl = (funct7[5]) ? `ALU_SRA : `ALU_SRL;
+                        3'b110: alu_ctrl = `ALU_OR;
+                        3'b111: alu_ctrl = `ALU_AND;
+                        default: alu_ctrl = `ALU_ADD;
+                    endcase
+                end
             end
 
             // 32-bit Register-Register Operations (W-instructions)
@@ -143,12 +212,19 @@ module id_stage (
                 wb_sel     = `WB_SEL_ALU;
                 uses_rs1   = 1'b1;
                 uses_rs2   = 1'b1;
-                case (funct3)
-                    3'b000: alu_ctrl = (funct7[5]) ? `ALU_SUBW : `ALU_ADDW;
-                    3'b001: alu_ctrl = `ALU_SLLW;
-                    3'b101: alu_ctrl = (funct7[5]) ? `ALU_SRAW : `ALU_SRLW;
-                    default: alu_ctrl = `ALU_ADDW;
-                endcase
+                if (funct7 == 7'b0000001) begin
+                    case (funct3)
+                        3'b000: alu_ctrl = `ALU_MULW;   // MULW
+                        default: alu_ctrl = `ALU_MULW;
+                    endcase
+                end else begin
+                    case (funct3)
+                        3'b000: alu_ctrl = (funct7[5]) ? `ALU_SUBW : `ALU_ADDW;
+                        3'b001: alu_ctrl = `ALU_SLLW;
+                        3'b101: alu_ctrl = (funct7[5]) ? `ALU_SRAW : `ALU_SRLW;
+                        default: alu_ctrl = `ALU_ADDW;
+                    endcase
+                end
             end
 
             // 64-bit Register-Immediate Operations
@@ -266,6 +342,24 @@ module id_stage (
                 // Invalid or unsupported instruction defaults to NOP
             end
         endcase
+
+        // Illegal instructions must have no architectural side effects:
+        // squash every control signal so they flow down the pipe as a NOP.
+        if (illegal) begin
+            alua_sel   = `ALUA_SEL_RS1;
+            alub_sel   = `ALUB_SEL_RS2;
+            alu_ctrl   = `ALU_ADD;
+            branch     = 1'b0;
+            jal        = 1'b0;
+            jalr       = 1'b0;
+            mem_read   = 1'b0;
+            mem_write  = 1'b0;
+            reg_write  = 1'b0;
+            wb_sel     = `WB_SEL_ALU;
+            uses_rs1   = 1'b0;
+            uses_rs2   = 1'b0;
+            halt       = 1'b0;
+        end
     end
 
 endmodule

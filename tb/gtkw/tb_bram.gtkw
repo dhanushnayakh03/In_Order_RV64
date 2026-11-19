@@ -1,0 +1,43 @@
+[*] layout for tb_bram
+[timestart] 0
+@28
+tb_bram.clk
+@820
+tb_bram.phase[95:0]
+@200
+-DMEM core port (port A)
+@28
+tb_bram.d_en
+tb_bram.d_we[7:0]
+@22
+tb_bram.d_addr[63:0]
+tb_bram.d_wdata[63:0]
+tb_bram.d_rdata[63:0]
+@200
+-DMEM contents
+@22
+tb_bram.dmem_word_0x10[63:0]
+tb_bram.dmem_word_0x18[63:0]
+@200
+-DMEM host port (port B)
+@28
+tb_bram.h_en
+tb_bram.h_wstrb[3:0]
+@22
+tb_bram.h_addr[31:0]
+tb_bram.h_wdata[31:0]
+tb_bram.h_rdata[31:0]
+@200
+-IMEM host write
+@28
+tb_bram.ih_we
+@22
+tb_bram.ih_addr[31:0]
+tb_bram.ih_wdata[31:0]
+@200
+-IMEM fetch port
+@28
+tb_bram.i_en
+@22
+tb_bram.i_addr[63:0]
+tb_bram.i_rdata[31:0]
